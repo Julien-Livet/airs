@@ -241,11 +241,18 @@ mod tests
             ValueType::String,
         ));
 
-        neurons.push(add_neuron);
-        neurons.push(mul_neuron);
-        neurons.push(int_to_str_neuron);
+        neurons.push(add_neuron.clone());
+        neurons.push(mul_neuron.clone());
+        neurons.push(int_to_str_neuron.clone());
 
         let target = NeuronValue::String("11".into());
+
+        let conn2 = Arc::new(Connection::new(neurons[2].clone(), &vec![]));
+        let conn9 = Arc::new(Connection::new(neurons[9].clone(), &vec![]));
+        let conn = Arc::new(Connection::new(int_to_str_neuron, &[ConnectionValue::Connection(Arc::new(Connection::new(add_neuron.clone(), &[ConnectionValue::Connection(conn2), ConnectionValue::Connection(conn9)])))]));
+
+        assert!(conn.output().unwrap().heuristic(&target) == 0.0);
+
         let brain: Brain = Brain::new(neurons);
         let connections = brain.learn(&[target.clone()].to_vec(), 2);
 

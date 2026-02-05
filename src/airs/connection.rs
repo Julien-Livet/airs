@@ -239,4 +239,18 @@ impl Connection {
 
         types
     }
+
+    pub fn deep_clone(&self) -> Connection {
+        let inputs = self.inputs.read().expect("Lock poisoned");
+        let mut new_inputs: Vec<ConnectionValue> = vec![];
+
+        for input in inputs.iter() {
+            match input {
+                ConnectionValue::Connection(c) => new_inputs.push(ConnectionValue::Connection(Arc::new(c.deep_clone()))),
+                ConnectionValue::Value(v) => new_inputs.push(ConnectionValue::Value(v.clone())),
+            }
+        }
+
+        Connection::new(self.neuron.clone(), &new_inputs)
+    }
 }

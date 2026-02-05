@@ -1,8 +1,6 @@
 use rayon::prelude::*;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, BinaryHeap};
-use std::hash::{Hash, Hasher};
-use std::process::exit;
 use std::sync::Arc;
 
 use super::connection::Connection;
@@ -168,7 +166,7 @@ impl Brain {
 
                     let product = cartesian_product(args);
 
-                    Some((Arc::clone(conn), product))
+                    Some((conn.clone(), product))
                 })
                 .collect();
             
@@ -183,9 +181,8 @@ impl Brain {
 
                 for (conn, params_list) in &connection_parameters {
                     for params in params_list {
-                        let inputs_list: Vec<ConnectionValue> = conn.inputs().iter().cloned().collect();
-                        let c = Connection::new(conn.neuron().clone(), &inputs_list);
-                            
+                        let c = Arc::new(conn.deep_clone());
+
                         c.apply_inputs(params);
 
                         let value = c.output().unwrap();
@@ -195,7 +192,7 @@ impl Brain {
                             value,
                             cost,
                             connection_cost: c.cost(),
-                            connection: Arc::new(c),
+                            connection: c,
                         });
                     }
                 }
