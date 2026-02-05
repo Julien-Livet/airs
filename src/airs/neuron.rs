@@ -5,33 +5,38 @@ pub enum Type {
     Char,
     Double,
     Float,
+    Int32,
     Int64,
     String,
     Type
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Value {
+#[derive(Clone, Debug, PartialEq)]
+pub enum NeuronValue {
     Char(String),
-    //Double(f64),
-    //Float(f32),
+    Double(f64),
+    Float(f32),
+    Int32(i32),
     Int64(i64),
     Str(String),
     Type(Type),
 }
 
-impl Value {
+impl NeuronValue {
     pub fn value_type(&self) -> Type {
         match self {
-            Value::Char(_) => Type::Char,
-            Value::Int64(_) => Type::Int64,
-            Value::Str(_) => Type::String,
-            Value::Type(t) => t.clone(),
+            NeuronValue::Char(_) => Type::Char,
+            NeuronValue::Double(_) => Type::Double,
+            NeuronValue::Float(_) => Type::Float,
+            NeuronValue::Int32(_) => Type::Int32,
+            NeuronValue::Int64(_) => Type::Int64,
+            NeuronValue::Str(_) => Type::String,
+            NeuronValue::Type(t) => t.clone(),
         }
     }
 }
 
-pub type NeuronFn = dyn Fn(&[Value]) -> Option<Value> + Send + Sync;
+pub type NeuronFn = dyn Fn(&[NeuronValue]) -> Option<NeuronValue> + Send + Sync;
 
 pub struct Neuron {
     name: String,
@@ -67,7 +72,7 @@ impl Neuron {
         &self.output_type
     }
 
-    pub fn apply(&self, args: &[Value]) -> Option<Value> {
+    pub fn apply(&self, args: &[NeuronValue]) -> Option<NeuronValue> {
         (self.function)(args)
     }
 }
