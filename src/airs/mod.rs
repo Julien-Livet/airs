@@ -9,6 +9,4 @@ pub use self::connection::ConnectionValue;
 pub use self::neuron::Neuron;
 pub use self::neuron::NeuronValue;
 pub use self::neuron::ValueType;
-pub use self::utility::cartesian_product;
-pub use self::utility::levenshtein;
-pub use self::utility::matrix_to_string;
+pub use self::utility::*;

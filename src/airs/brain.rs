@@ -57,6 +57,7 @@ impl Brain {
         &self,
         targets: &[NeuronValue],
         max_level: usize,
+        eps: f64,
     ) -> Vec<Arc<Connection> > {
         let mut connections: HashSet<Arc<Connection> > = Default::default();
         let mut parameters: HashMap<ValueType, Vec<Arc<Connection> > > = Default::default();
@@ -179,7 +180,7 @@ impl Brain {
             .map(|target| {
                 let mut heap = BinaryHeap::new();
 
-                for (conn, params_list) in &connection_parameters {
+                'conn_loop: for (conn, params_list) in &connection_parameters {
                     for params in params_list {
                         let c = Arc::new(conn.deep_clone());
 
@@ -194,6 +195,10 @@ impl Brain {
                             connection_cost: c.cost(),
                             connection: c,
                         });
+
+                        if cost < eps {
+                            break 'conn_loop;
+                        }
                     }
                 }
 

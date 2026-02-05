@@ -254,7 +254,7 @@ mod tests
         assert!(conn.output().unwrap().heuristic(&target) == 0.0);
 
         let brain: Brain = Brain::new(neurons);
-        let connections = brain.learn(&[target.clone()].to_vec(), 2);
+        let connections = brain.learn(&[target.clone()].to_vec(), 3, 1e-6);
 
         assert_ne!(connections.len(), 0);
 
