@@ -1,13 +1,15 @@
 use rayon::prelude::*;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, BinaryHeap};
+use std::hash::{Hash, Hasher};
+use std::process::exit;
 use std::sync::Arc;
 
 use super::connection::Connection;
 use super::connection::ConnectionValue;
 use super::neuron::Neuron;
 use super::neuron::NeuronValue;
-use super::neuron::Type;
+use super::neuron::ValueType;
 use super::utility::*;
 
 pub struct Brain {
@@ -59,7 +61,7 @@ impl Brain {
         max_level: usize,
     ) -> Vec<Arc<Connection> > {
         let mut connections: HashSet<Arc<Connection> > = Default::default();
-        let mut parameters: HashMap<Type, Vec<Arc<Connection> > > = Default::default();
+        let mut parameters: HashMap<ValueType, Vec<Arc<Connection> > > = Default::default();
 
         for neuron in &self.neurons {
             let input_types = neuron.input_types();
@@ -75,7 +77,7 @@ impl Brain {
             } else {
                 let v: Vec<ConnectionValue> = input_types
                     .iter()
-                    .map(|ty| ConnectionValue::Value(NeuronValue::Type(ty.clone())))
+                    .map(|ty| ConnectionValue::Value(NeuronValue::ValueType(ty.clone())))
                     .collect();
 
                 let conn = Arc::new(Connection::new(Arc::clone(neuron), &v));
@@ -98,10 +100,10 @@ impl Brain {
             }
         }
 
-        let mut connection_mapping: HashMap<Type, HashSet<Arc<Connection> > > =
+        let mut connection_mapping: HashMap<ValueType, HashSet<Arc<Connection> > > =
             HashMap::new();
 
-        for level in 0..max_level {
+        for _ in 0..max_level {
             let mut mapping = connection_mapping.clone();
 
             for connection in &connections {
@@ -109,50 +111,48 @@ impl Brain {
                 let output_type = neuron.output_type().clone();
                 let input_types = neuron.input_types();
                 let mut args: Vec<Vec<ConnectionValue> > = Vec::new();
-
+                
                 for input_type in input_types {
                     let mut possibilities = Vec::new();
                     
-                    possibilities.push(ConnectionValue::Value(NeuronValue::Type(input_type.clone())));
+                    possibilities.push(ConnectionValue::Value(NeuronValue::ValueType(input_type.clone())));
 
                     if let Some(existing_conns) = connection_mapping.get(input_type) {
                         for existing in existing_conns {
                             possibilities.push(ConnectionValue::Connection(Arc::clone(existing)));
                         }
                     }
+
                     args.push(possibilities);
                 }
-
+                
                 for p in cartesian_product(args) {
-                    let mut new_conn = Connection::new(
-                        Arc::clone(&connection.neuron()), 
-                        &p
-                    );
+                    let new_conn = Arc::new(Connection::new(connection.neuron().clone(), &p));
                     
                     mapping
                         .entry(output_type.clone())
                         .or_insert_with(HashSet::new)
-                        .insert(Arc::new(new_conn));
+                        .insert(new_conn);
                 }
             }
 
             connection_mapping = mapping;
             connections.clear();
-
+            
             for set in connection_mapping.values() {
                 for conn in set {
-                    connections.insert(Arc::clone(conn));
+                    connections.insert(conn.clone());
                 }
             }
         }
-
-        let all_connections: Vec<Arc<Connection> > =
-            connection_mapping
-                .values()
-                .flat_map(|v| v.iter().cloned())
-                .collect();
+        for neuron in &self.neurons {
+            if neuron.input_types().is_empty() {
+                connections.insert(Arc::new(Connection::new(neuron.clone(), &vec![])));
+            }
+        }
+        
         let connection_parameters: HashMap<Arc<Connection>, Vec<Vec<ConnectionValue> > > =
-            all_connections
+            connections
                 .par_iter()
                 .filter_map(|conn| {
                     let input_types = conn.input_types();
@@ -171,7 +171,7 @@ impl Brain {
                     Some((Arc::clone(conn), product))
                 })
                 .collect();
-
+            
         if connection_parameters.is_empty() {
             return vec![];
         }
@@ -179,7 +179,6 @@ impl Brain {
         targets
             .par_iter()
             .map(|target| {
-
                 let mut heap = BinaryHeap::new();
 
                 for (conn, params_list) in &connection_parameters {

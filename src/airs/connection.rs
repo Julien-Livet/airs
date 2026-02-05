@@ -1,17 +1,20 @@
 use std::hash::{Hash, Hasher};
+use std::ops::Deref;
+use std::os::unix::raw::ino_t;
 use std::sync::{Arc, RwLock};
 
 use super::neuron::Neuron;
-use super::neuron::Type;
+use super::neuron::ValueType;
 use super::neuron::NeuronValue;
 use super::utility::*;
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ConnectionValue {
     Value(NeuronValue),
     Connection(Arc<Connection>),
 }
 
+#[derive(Debug)]
 pub struct Connection {
     neuron: Arc<Neuron>,
     inputs: RwLock<Vec<ConnectionValue> >,
@@ -19,7 +22,32 @@ pub struct Connection {
 
 impl PartialEq for Connection {
     fn eq(&self, other: &Self) -> bool {
-        std::ptr::eq(self, other)
+        if (self.neuron().deref() as *const Neuron) != (other.neuron().deref() as *const Neuron) {
+            return false;
+        }
+
+        let inputs = self.inputs.read().expect("Lock poisoned");
+        let other_inputs = other.inputs.read().expect("Lock poisoned");
+
+        if inputs.len() != other_inputs.len() {
+            return false;
+        }
+
+        let mut equal = true;
+
+        for i in 0..inputs.len() {
+            match (inputs[i].clone(), other_inputs[i].clone()) {
+                (ConnectionValue::Connection(a), ConnectionValue::Connection(b)) => equal &= a == b,
+                (ConnectionValue::Value(a), ConnectionValue::Value(b)) => equal &= a == b,
+                (_, _) => equal = false,
+            }
+
+            if !equal {
+                break;
+            }
+        }
+        
+        return equal;
     }
 }
 
@@ -27,7 +55,16 @@ impl Eq for Connection {}
 
 impl Hash for Connection {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        (self as *const Connection).hash(state);
+        (self.neuron().deref() as *const Neuron).hash(state);
+
+        let inputs = self.inputs.read().expect("Lock poisoned");
+
+        for input in inputs.iter() {
+            match input {
+                ConnectionValue::Connection(c) => c.hash(state),
+                ConnectionValue::Value(v) => v.hash(state),
+            }
+        }
     }
 }
 
@@ -50,7 +87,7 @@ impl Connection {
                 NeuronValue::Double(d) => d.to_string(),
                 NeuronValue::Grid(g) => matrix_to_string(g),
                 NeuronValue::String(s) => s.clone(),
-                NeuronValue::Type(t) => format!("{:?}", t),
+                NeuronValue::ValueType(t) => format!("{:?}", t),
             }
 
             ConnectionValue::Connection(c) => c.to_string(),
@@ -131,18 +168,14 @@ impl Connection {
 
                     if size > 0 {
                         let sub_inputs = &inputs[index..index + size];
-                        let inputs_list: Vec<ConnectionValue> = self.inputs.read().expect("Lock poisoned").iter().cloned().collect();
-                        let conn_mut = Connection::new(conn.neuron().clone(), &inputs_list);
 
-                        conn_mut.apply_inputs(sub_inputs);
-                        *input = ConnectionValue::Connection(conn);
+                        conn.apply_inputs(sub_inputs);
                         index += size;
                     } else {
                         *input = inputs[index].clone();
                         index += 1;
                     }
                 }
-
                 _ => {
                     if index < inputs.len() {
                         match &inputs[index] {
@@ -150,7 +183,7 @@ impl Connection {
                             }
                             ConnectionValue::Value(value) => {
                                 match value {
-                                    NeuronValue::Type(t) => {
+                                    NeuronValue::ValueType(t) => {
                                         assert_eq!(
                                             self.neuron.input_types()[i],
                                             *t
@@ -174,7 +207,7 @@ impl Connection {
         }
     }
 
-    pub fn input_types(&self) -> Vec<Type> {
+    pub fn input_types(&self) -> Vec<ValueType> {
         let inputs = self.inputs.read().expect("Lock poisoned");
         let mut types = Vec::with_capacity(inputs.len());
 
@@ -192,7 +225,7 @@ impl Connection {
 
                 ConnectionValue::Value(value) => {
                     match value {
-                        NeuronValue::Type(t) => {
+                        NeuronValue::ValueType(t) => {
                             types.push(t.clone());
                         }
 

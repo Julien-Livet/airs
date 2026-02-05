@@ -7,19 +7,21 @@ fn main() {
 #[cfg(test)]
 mod tests
 {
+    use std::collections::HashSet;
+    use std::hash::{DefaultHasher, Hash, Hasher};
     use std::sync::Arc;
 
     use super::airs::Brain as Brain;
     use super::airs::Connection as Connection;
     use super::airs::ConnectionValue as ConnectionValue;
     use super::airs::Neuron as Neuron;
-    use super::airs::Type as Type;
+    use super::airs::ValueType as ValueType;
     use super::airs::NeuronValue as NeuronValue;
 
     #[test]
     fn test_valid_connections() {
         let mut digit_neurons: Vec<Arc<Neuron> > = vec![];
-
+        
         for i in 0..10 {
             let name = format!("{}", i);
 
@@ -29,12 +31,12 @@ mod tests
                     Some(NeuronValue::Int64(i))
                 }),
                 vec![],
-                Type::Int64,
+                ValueType::Int64,
             ));
 
             digit_neurons.push(neuron);
         }
-
+        
         let add_neuron = Arc::new(Neuron::new(
             "add",
             Arc::new(|inputs: &[NeuronValue]| {
@@ -49,10 +51,10 @@ mod tests
                     _ => None,
                 }
             }),
-            vec![Type::Int64, Type::Int64],
-            Type::Int64,
+            vec![ValueType::Int64, ValueType::Int64],
+            ValueType::Int64,
         ));
-
+        
         let sub_neuron = Arc::new(Neuron::new(
             "sub",
             Arc::new(|inputs: &[NeuronValue]| {
@@ -67,10 +69,10 @@ mod tests
                     _ => None,
                 }
             }),
-            vec![Type::Int64, Type::Int64],
-            Type::Int64,
+            vec![ValueType::Int64, ValueType::Int64],
+            ValueType::Int64,
         ));
-
+        
         let mul_neuron = Arc::new(Neuron::new(
             "mul",
             Arc::new(|inputs: &[NeuronValue]| {
@@ -85,8 +87,8 @@ mod tests
                     _ => None,
                 }
             }),
-            vec![Type::Int64, Type::Int64],
-            Type::Int64,
+            vec![ValueType::Int64, ValueType::Int64],
+            ValueType::Int64,
         ));
 
         let conn0 = Connection::new(
@@ -98,7 +100,6 @@ mod tests
         assert_eq!(conn0.output(), Some(NeuronValue::Int64(0)));
         assert_eq!(conn0.depth(0), 0);
         assert_eq!(conn0.cost(), 0);
-
 
         let conn1 = Arc::new(Connection::new(add_neuron.clone(),
         &[ConnectionValue::Value(NeuronValue::Int64(2)), ConnectionValue::Value(NeuronValue::Int64(3))].to_vec()));
@@ -121,9 +122,9 @@ mod tests
 
         let int_neuron = Arc::new(Neuron::new(
             "int",
-            Arc::new(|_| Some(NeuronValue::Type(Type::Int64))),
+            Arc::new(|_| Some(NeuronValue::ValueType(ValueType::Int64))),
             vec![],
-            Type::Type,
+            ValueType::Type,
         ));
 
         let int_connection = Arc::new(Connection::new(int_neuron.clone(), &vec![]));
@@ -134,6 +135,37 @@ mod tests
         assert_eq!(conn3.to_string(), "sub(int, int)");
         assert_eq!(conn3.depth(0), 1);
         assert_eq!(conn3.cost(), 2);
+    }
+
+    #[test]
+    fn test_connection_eq()
+    {
+        let int_neuron = Arc::new(Neuron::new(
+            "int",
+            Arc::new(|_| Some(NeuronValue::ValueType(ValueType::Int64))),
+            vec![],
+            ValueType::Type,
+        ));
+
+        let conn1 = Arc::new(Connection::new(int_neuron.clone(), &vec![]));
+        let conn2 = Arc::new(Connection::new(int_neuron.clone(), &vec![]));
+
+        assert_eq!(conn1, conn2);
+
+        let mut h1 = DefaultHasher::new();
+        let mut h2 = DefaultHasher::new();
+        conn1.hash(&mut h1);
+        conn1.hash(&mut h2);
+        
+        assert_eq!(h1.finish(), h2.finish());
+
+        let mut connections: HashSet<Arc<Connection> > = Default::default();
+
+        connections.insert(conn1.clone());
+        connections.insert(conn1.clone());
+        connections.insert(conn2.clone());
+
+        assert_eq!(connections.len(), 1);
     }
 
     #[test]
@@ -149,7 +181,7 @@ mod tests
                     Some(NeuronValue::Int64(i))
                 }),
                 vec![],
-                Type::Int64,
+                ValueType::Int64,
             ));
 
             neurons.push(neuron);
@@ -169,8 +201,8 @@ mod tests
                     _ => None,
                 }
             }),
-            vec![Type::Int64, Type::Int64],
-            Type::Int64,
+            vec![ValueType::Int64, ValueType::Int64],
+            ValueType::Int64,
         ));
 
         let mul_neuron = Arc::new(Neuron::new(
@@ -187,8 +219,8 @@ mod tests
                     _ => None,
                 }
             }),
-            vec![Type::Int64, Type::Int64],
-            Type::Int64,
+            vec![ValueType::Int64, ValueType::Int64],
+            ValueType::Int64,
         ));
 
         let int_to_str_neuron = Arc::new(Neuron::new(
@@ -205,21 +237,22 @@ mod tests
                     _ => None,
                 }
             }),
-            vec![Type::Int64],
-            Type::String,
+            vec![ValueType::Int64],
+            ValueType::String,
         ));
 
         neurons.push(add_neuron);
         neurons.push(mul_neuron);
         neurons.push(int_to_str_neuron);
 
+        let target = NeuronValue::String("11".into());
         let brain: Brain = Brain::new(neurons);
-        let connections = brain.learn(&[NeuronValue::String("11".into())].to_vec(), 3);
+        let connections = brain.learn(&[target.clone()].to_vec(), 2);
 
         assert_ne!(connections.len(), 0);
 
         println!("{}", connections[0].to_string());
 
-        assert_eq!(connections.len(), 0);
+        assert!(connections[0].output().unwrap().heuristic(&target) == 0.0);
     }
 }

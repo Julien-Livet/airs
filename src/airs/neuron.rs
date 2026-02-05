@@ -1,10 +1,11 @@
+use std::fmt::{Debug, Display, Error, Formatter, Result};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use super::utility::*;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Type {
+pub enum ValueType {
     Bool,
     Char,
     Double,
@@ -26,13 +27,20 @@ pub enum NeuronValue {
     Int64(i64),
     String(String),
     Grid(Vec<Vec<u8> >),
-    Type(Type),
+    ValueType(ValueType),
+}
+
+impl Display for NeuronValue {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        write!(f, "{}", self)
+    }
 }
 
 impl PartialEq for NeuronValue {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (NeuronValue::Bool(a), NeuronValue::Bool(b)) => a == b,
+            (NeuronValue::Char(a), NeuronValue::Char(b)) => a == b,
             (NeuronValue::Int64(a), NeuronValue::Int64(b)) => a == b,
             (NeuronValue::Int32(a), NeuronValue::Int32(b)) => a == b,
             (NeuronValue::Float(a), NeuronValue::Float(b)) => {
@@ -41,6 +49,9 @@ impl PartialEq for NeuronValue {
             (NeuronValue::Double(a), NeuronValue::Double(b)) => {
                 a.to_bits() == b.to_bits()
             }
+            (NeuronValue::String(a), NeuronValue::String(b)) => a == b,
+            (NeuronValue::ValueType(a), NeuronValue::ValueType(b)) => a == b,
+            (NeuronValue::Grid(a), NeuronValue::Grid(b)) => a == b,
             _ => false,
         }
     }
@@ -58,24 +69,24 @@ impl Hash for NeuronValue {
             NeuronValue::Float(v) => v.to_bits().hash(state),
             NeuronValue::Double(v) => v.to_bits().hash(state),
             NeuronValue::Grid(v) => v.hash(state),
-            NeuronValue::Type(v) => v.hash(state),
+            NeuronValue::ValueType(v) => v.hash(state),
             NeuronValue::String(v) => v.hash(state),
         }
     }
 }
 
 impl NeuronValue {
-    pub fn value_type(&self) -> Type {
+    pub fn value_type(&self) -> ValueType {
         match self {
-            NeuronValue::Bool(_) => Type::Bool,
-            NeuronValue::Char(_) => Type::Char,
-            NeuronValue::Double(_) => Type::Double,
-            NeuronValue::Float(_) => Type::Float,
-            NeuronValue::Int32(_) => Type::Int32,
-            NeuronValue::Int64(_) => Type::Int64,
-            NeuronValue::String(_) => Type::String,
-            NeuronValue::Grid(_) => Type::Grid,
-            NeuronValue::Type(t) => t.clone(),
+            NeuronValue::Bool(_) => ValueType::Bool,
+            NeuronValue::Char(_) => ValueType::Char,
+            NeuronValue::Double(_) =>ValueType::Double,
+            NeuronValue::Float(_) => ValueType::Float,
+            NeuronValue::Int32(_) => ValueType::Int32,
+            NeuronValue::Int64(_) => ValueType::Int64,
+            NeuronValue::String(_) => ValueType::String,
+            NeuronValue::Grid(_) => ValueType::Grid,
+            NeuronValue::ValueType(t) => t.clone(),
         }
     }
 
@@ -106,16 +117,26 @@ pub type NeuronFn = dyn Fn(&[NeuronValue]) -> Option<NeuronValue> + Send + Sync;
 pub struct Neuron {
     name: String,
     function: Arc<NeuronFn>,
-    input_types: Vec<Type>,
-    output_type: Type,
+    input_types: Vec<ValueType>,
+    output_type: ValueType,
+}
+
+impl Debug for Neuron {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        f.debug_struct("Neuron")
+         .field("name", &self.name)
+         .field("input_types", &self.input_types)
+         .field("output_type", &self.output_type)
+         .finish()
+    }
 }
 
 impl Neuron {
     pub fn new(
         name: impl Into<String>,
         function: Arc<NeuronFn>,
-        input_types: Vec<Type>,
-        output_type: Type,
+        input_types: Vec<ValueType>,
+        output_type: ValueType,
     ) -> Self {
         Self {
             name: name.into(),
@@ -129,11 +150,11 @@ impl Neuron {
         self.name.clone()
     }
 
-    pub fn input_types(&self) -> &[Type] {
+    pub fn input_types(&self) -> &[ValueType] {
         &self.input_types
     }
 
-    pub fn output_type(&self) -> &Type {
+    pub fn output_type(&self) -> &ValueType {
         &self.output_type
     }
 
