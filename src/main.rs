@@ -9,7 +9,7 @@ mod tests
 {
     use std::sync::Arc;
 
-    //use super::airs::Brain as Brain;
+    use super::airs::Brain as Brain;
     use super::airs::Connection as Connection;
     use super::airs::ConnectionValue as ConnectionValue;
     use super::airs::Neuron as Neuron;
@@ -155,12 +155,71 @@ mod tests
             neurons.push(neuron);
         }
 
-        //let brain: Brain = Brain::new(neurons);
-        
-        //let connections = brain.learn(["11"]);
+        let add_neuron = Arc::new(Neuron::new(
+            "add",
+            Arc::new(|inputs: &[NeuronValue]| {
+                if inputs.len() != 2 {
+                    return None;
+                }
 
-        //assert_ne!(connections.len(), 0);
+                match (&inputs[0], &inputs[1]) {
+                    (NeuronValue::Int64(a), NeuronValue::Int64(b)) => {
+                        Some(NeuronValue::Int64(a + b))
+                    }
+                    _ => None,
+                }
+            }),
+            vec![Type::Int64, Type::Int64],
+            Type::Int64,
+        ));
 
-        //println!("{}", connections[0].to_string());
+        let mul_neuron = Arc::new(Neuron::new(
+            "mul",
+            Arc::new(|inputs: &[NeuronValue]| {
+                if inputs.len() != 2 {
+                    return None;
+                }
+
+                match (&inputs[0], &inputs[1]) {
+                    (NeuronValue::Int64(a), NeuronValue::Int64(b)) => {
+                        Some(NeuronValue::Int64(a * b))
+                    }
+                    _ => None,
+                }
+            }),
+            vec![Type::Int64, Type::Int64],
+            Type::Int64,
+        ));
+
+        let int_to_str_neuron = Arc::new(Neuron::new(
+            "int_to_str",
+            Arc::new(|inputs: &[NeuronValue]| {
+                if inputs.len() != 1 {
+                    return None;
+                }
+
+                match &inputs[0] {
+                    NeuronValue::Int64(a) => {
+                        Some(NeuronValue::String(format!("{}", a)))
+                    }
+                    _ => None,
+                }
+            }),
+            vec![Type::Int64],
+            Type::String,
+        ));
+
+        neurons.push(add_neuron);
+        neurons.push(mul_neuron);
+        neurons.push(int_to_str_neuron);
+
+        let brain: Brain = Brain::new(neurons);
+        let connections = brain.learn(&[NeuronValue::String("11".into())].to_vec(), 3);
+
+        assert_ne!(connections.len(), 0);
+
+        println!("{}", connections[0].to_string());
+
+        assert_eq!(connections.len(), 0);
     }
 }
