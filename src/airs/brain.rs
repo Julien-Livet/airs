@@ -16,7 +16,6 @@ pub struct Brain {
 
 #[derive(Clone)]
 pub struct Pair {
-    pub value: NeuronValue,
     pub cost: f64,
     pub connection_cost: usize,
     pub connection: Arc<Connection>,
@@ -144,6 +143,7 @@ impl Brain {
                 }
             }
         }
+
         for neuron in &self.neurons {
             if neuron.input_types().is_empty() {
                 connections.insert(Arc::new(Connection::new(neuron.clone(), &vec![])));
@@ -170,7 +170,7 @@ impl Brain {
                     Some((conn.clone(), product))
                 })
                 .collect();
-            
+
         if connection_parameters.is_empty() {
             return vec![];
         }
@@ -190,7 +190,6 @@ impl Brain {
                         let cost = value.heuristic(target);
 
                         heap.push(Pair {
-                            value,
                             cost,
                             connection_cost: c.cost(),
                             connection: c,

@@ -1,6 +1,5 @@
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
-use std::os::unix::raw::ino_t;
 use std::sync::{Arc, RwLock};
 
 use super::neuron::Neuron;
@@ -85,7 +84,8 @@ impl Connection {
                 NeuronValue::Int64(i) => i.to_string(),
                 NeuronValue::Float(f) => f.to_string(),
                 NeuronValue::Double(d) => d.to_string(),
-                NeuronValue::Grid(g) => matrix_to_string(g),
+                NeuronValue::Grid(g) => format!("{:#?}", g),
+                NeuronValue::Grids(_g) => String::new(),
                 NeuronValue::String(s) => s.clone(),
                 NeuronValue::ValueType(t) => format!("{:?}", t),
             }

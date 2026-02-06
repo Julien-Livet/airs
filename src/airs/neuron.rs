@@ -1,6 +1,7 @@
-use std::fmt::{Debug, Display, Error, Formatter, Result};
+use ndarray::Array2;
+use std::fmt::{Debug, Display, Formatter, Result};
 use std::hash::{Hash, Hasher};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use super::utility::*;
 
@@ -14,6 +15,7 @@ pub enum ValueType {
     Int64,
     String,
     Grid,
+    Grids,
     Type,
 }
 
@@ -26,7 +28,8 @@ pub enum NeuronValue {
     Int32(i32),
     Int64(i64),
     String(String),
-    Grid(Vec<Vec<u8> >),
+    Grid(Array2<i8>),
+    Grids(Vec<Array2<i8> >),
     ValueType(ValueType),
 }
 
@@ -69,6 +72,7 @@ impl Hash for NeuronValue {
             NeuronValue::Float(v) => v.to_bits().hash(state),
             NeuronValue::Double(v) => v.to_bits().hash(state),
             NeuronValue::Grid(v) => v.hash(state),
+            NeuronValue::Grids(v) => v.hash(state),
             NeuronValue::ValueType(v) => v.hash(state),
             NeuronValue::String(v) => v.hash(state),
         }
@@ -86,6 +90,7 @@ impl NeuronValue {
             NeuronValue::Int64(_) => ValueType::Int64,
             NeuronValue::String(_) => ValueType::String,
             NeuronValue::Grid(_) => ValueType::Grid,
+            NeuronValue::Grids(_) => ValueType::Grids,
             NeuronValue::ValueType(t) => t.clone(),
         }
     }
@@ -99,13 +104,27 @@ impl NeuronValue {
             (NeuronValue::Float(a), NeuronValue::Float(b)) => (*a - *b).abs() as f64,
             (NeuronValue::Double(a), NeuronValue::Double(b)) => (*a - *b).abs(),
             (NeuronValue::String(a), NeuronValue::String(b)) => levenshtein(a, b) as f64,
-            (NeuronValue::Grid(a), NeuronValue::Grid(b)) => {
-                if a.len() != b.len() || a[0].len() != b[0].len() {
-                    return f64::INFINITY;
+            (NeuronValue::Grid(val), NeuronValue::Grid(target)) => {
+                if val.shape() != target.shape() {
+                    return 100.0 + (val.sum() - target.sum()).abs() as f64;
                 }
-                a.iter().zip(b).fold(0.0, |acc, (ra, rb)| {
-                    acc + ra.iter().zip(rb).map(|(x,y)| (*x as f64 - *y as f64).abs()).sum::<f64>()
-                })
+
+                val.iter()
+                    .zip(target.iter())
+                    .map(|(a, b)| (a - b).abs())
+                    .sum::<i8>() as f64
+            }
+            (NeuronValue::Grids(val), NeuronValue::Grids(target)) => {
+                if val.len() != target.len() {
+                    return 100.0 + (val.len() as f64 - target.len() as f64).abs();
+                }
+
+                let x: Vec<f64> = val.iter()
+                    .zip(target.iter())
+                    .map(|(a, b)| NeuronValue::Grid(a.clone()).heuristic(&NeuronValue::Grid(b.clone())))
+                    .collect();
+
+                x.iter().map(|d| d * d).sum::<f64>().sqrt()
             }
             _ => f64::INFINITY,
         }
@@ -116,7 +135,7 @@ pub type NeuronFn = dyn Fn(&[NeuronValue]) -> Option<NeuronValue> + Send + Sync;
 
 pub struct Neuron {
     name: String,
-    function: Arc<NeuronFn>,
+    pub function: RwLock<Arc<NeuronFn> >,
     input_types: Vec<ValueType>,
     output_type: ValueType,
 }
@@ -134,7 +153,7 @@ impl Debug for Neuron {
 impl Neuron {
     pub fn new(
         name: impl Into<String>,
-        function: Arc<NeuronFn>,
+        function: RwLock<Arc<NeuronFn> >,
         input_types: Vec<ValueType>,
         output_type: ValueType,
     ) -> Self {
@@ -159,6 +178,8 @@ impl Neuron {
     }
 
     pub fn apply(&self, args: &[NeuronValue]) -> Option<NeuronValue> {
-        (self.function)(args)
+        let func = self.function.read().unwrap();
+
+        (func)(args)
     }
 }

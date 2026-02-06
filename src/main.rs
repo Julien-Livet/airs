@@ -1,4 +1,6 @@
 mod airs;
+mod arc;
+mod primitives;
 
 #[cfg(not(test))]
 fn main() {
@@ -9,7 +11,7 @@ mod tests
 {
     use std::collections::HashSet;
     use std::hash::{DefaultHasher, Hash, Hasher};
-    use std::sync::Arc;
+    use std::sync::{Arc, RwLock};
 
     use super::airs::Brain as Brain;
     use super::airs::Connection as Connection;
@@ -17,6 +19,10 @@ mod tests
     use super::airs::Neuron as Neuron;
     use super::airs::ValueType as ValueType;
     use super::airs::NeuronValue as NeuronValue;
+
+    use super::arc::load_task;
+    use super::arc::input_output_pairs;
+    use super::primitives::*;
 
     #[test]
     fn test_valid_connections() {
@@ -27,9 +33,9 @@ mod tests
 
             let neuron = Arc::new(Neuron::new(
                 name,
-                Arc::new(move |_inputs: &[NeuronValue]| {
+                RwLock::new(Arc::new(move |_inputs: &[NeuronValue]| {
                     Some(NeuronValue::Int64(i))
-                }),
+                })),
                 vec![],
                 ValueType::Int64,
             ));
@@ -39,7 +45,7 @@ mod tests
         
         let add_neuron = Arc::new(Neuron::new(
             "add",
-            Arc::new(|inputs: &[NeuronValue]| {
+            RwLock::new(Arc::new(|inputs: &[NeuronValue]| {
                 if inputs.len() != 2 {
                     return None;
                 }
@@ -50,14 +56,14 @@ mod tests
                     }
                     _ => None,
                 }
-            }),
+            })),
             vec![ValueType::Int64, ValueType::Int64],
             ValueType::Int64,
         ));
         
         let sub_neuron = Arc::new(Neuron::new(
             "sub",
-            Arc::new(|inputs: &[NeuronValue]| {
+            RwLock::new(Arc::new(|inputs: &[NeuronValue]| {
                 if inputs.len() != 2 {
                     return None;
                 }
@@ -68,14 +74,14 @@ mod tests
                     }
                     _ => None,
                 }
-            }),
+            })),
             vec![ValueType::Int64, ValueType::Int64],
             ValueType::Int64,
         ));
         
         let mul_neuron = Arc::new(Neuron::new(
             "mul",
-            Arc::new(|inputs: &[NeuronValue]| {
+            RwLock::new(Arc::new(|inputs: &[NeuronValue]| {
                 if inputs.len() != 2 {
                     return None;
                 }
@@ -86,7 +92,7 @@ mod tests
                     }
                     _ => None,
                 }
-            }),
+            })),
             vec![ValueType::Int64, ValueType::Int64],
             ValueType::Int64,
         ));
@@ -122,7 +128,9 @@ mod tests
 
         let int_neuron = Arc::new(Neuron::new(
             "int",
-            Arc::new(|_| Some(NeuronValue::ValueType(ValueType::Int64))),
+            RwLock::new(Arc::new(|_| {
+                Some(NeuronValue::ValueType(ValueType::Int64))
+            })),
             vec![],
             ValueType::Type,
         ));
@@ -142,7 +150,9 @@ mod tests
     {
         let int_neuron = Arc::new(Neuron::new(
             "int",
-            Arc::new(|_| Some(NeuronValue::ValueType(ValueType::Int64))),
+            RwLock::new(Arc::new(|_: &[NeuronValue]| {
+                Some(NeuronValue::ValueType(ValueType::Int64))
+            })),
             vec![],
             ValueType::Type,
         ));
@@ -177,9 +187,9 @@ mod tests
 
             let neuron = Arc::new(Neuron::new(
                 name,
-                Arc::new(move |_inputs: &[NeuronValue]| {
+                RwLock::new(Arc::new(move |_inputs: &[NeuronValue]| {
                     Some(NeuronValue::Int64(i))
-                }),
+                })),
                 vec![],
                 ValueType::Int64,
             ));
@@ -189,7 +199,7 @@ mod tests
 
         let add_neuron = Arc::new(Neuron::new(
             "add",
-            Arc::new(|inputs: &[NeuronValue]| {
+            RwLock::new(Arc::new(|inputs: &[NeuronValue]| {
                 if inputs.len() != 2 {
                     return None;
                 }
@@ -200,14 +210,14 @@ mod tests
                     }
                     _ => None,
                 }
-            }),
+            })),
             vec![ValueType::Int64, ValueType::Int64],
             ValueType::Int64,
         ));
 
         let mul_neuron = Arc::new(Neuron::new(
             "mul",
-            Arc::new(|inputs: &[NeuronValue]| {
+            RwLock::new(Arc::new(|inputs: &[NeuronValue]| {
                 if inputs.len() != 2 {
                     return None;
                 }
@@ -218,14 +228,14 @@ mod tests
                     }
                     _ => None,
                 }
-            }),
+            })),
             vec![ValueType::Int64, ValueType::Int64],
             ValueType::Int64,
         ));
 
         let int_to_str_neuron = Arc::new(Neuron::new(
             "int_to_str",
-            Arc::new(|inputs: &[NeuronValue]| {
+            RwLock::new(Arc::new(|inputs: &[NeuronValue]| {
                 if inputs.len() != 1 {
                     return None;
                 }
@@ -236,7 +246,7 @@ mod tests
                     }
                     _ => None,
                 }
-            }),
+            })),
             vec![ValueType::Int64],
             ValueType::String,
         ));
@@ -254,12 +264,96 @@ mod tests
         assert!(conn.output().unwrap().heuristic(&target) == 0.0);
 
         let brain: Brain = Brain::new(neurons);
-        let connections = brain.learn(&[target.clone()].to_vec(), 3, 1e-6);
+        let connections = brain.learn(&[target.clone()].to_vec(), 2, 1e-6);
 
         assert_ne!(connections.len(), 0);
 
         println!("{}", connections[0].to_string());
 
         assert!(connections[0].output().unwrap().heuristic(&target) == 0.0);
+    }
+
+    #[tokio::test]
+    async fn test_task3c9b0459() -> Result<(), Box<dyn std::error::Error>> {
+        let task = load_task("training", "3c9b0459").await?;
+        let train_pairs = input_output_pairs(&task.train);
+        let test_pairs = input_output_pairs(&task.test);
+
+        let fliplr_neuron = Arc::new(Neuron::new(
+            "fliplr",
+            RwLock::new(Arc::new(|inputs: &[NeuronValue]| {
+                if inputs.len() != 1 {
+                    return None;
+                }
+
+                match &inputs[0] {
+                    NeuronValue::Grids(a) => {
+                        Some(NeuronValue::Grids(fliplr(a)))
+                    }
+                    _ => None,
+                }
+            })),
+            vec![ValueType::Grids],
+            ValueType::Grids,
+        ));
+
+        let flipud_neuron = Arc::new(Neuron::new(
+            "flipud",
+            RwLock::new(Arc::new(|inputs: &[NeuronValue]| {
+                if inputs.len() != 1 {
+                    return None;
+                }
+
+                match &inputs[0] {
+                    NeuronValue::Grids(a) => {
+                        Some(NeuronValue::Grids(flipud(a)))
+                    }
+                    _ => None,
+                }
+            })),
+            vec![ValueType::Grids],
+            ValueType::Grids,
+        ));
+
+        let mut input = train_pairs.inputs;
+
+        let input_neuron = Arc::new(Neuron::new(
+            "input",
+            RwLock::new(Arc::new(move |_inputs| {
+                Some(NeuronValue::Grids(input.clone()))
+            })),
+            vec![],
+            ValueType::Grids,
+        ));
+
+        let mut neurons: Vec<Arc<Neuron> > = vec![];
+
+        neurons.push(fliplr_neuron);
+        neurons.push(flipud_neuron);
+        neurons.push(input_neuron.clone());
+
+        let target = NeuronValue::Grids(train_pairs.outputs);
+
+        let brain: Brain = Brain::new(neurons);
+        let connections = brain.learn(&[target.clone()].to_vec(), 2, 1e-6);
+
+        assert_ne!(connections.len(), 0);
+
+        println!("{}", connections[0].to_string());
+
+        assert!(connections[0].output().unwrap().heuristic(&target) == 0.0);
+        
+        input = test_pairs.inputs;
+        
+        {
+            let mut func = input_neuron.function.write().unwrap();
+            *func = Arc::new(move |_inputs: &[NeuronValue]| {
+                Some(NeuronValue::Grids(input.clone()))
+            });
+        }
+        
+        assert!(connections[0].output().unwrap().heuristic(&NeuronValue::Grids(test_pairs.outputs)) == 0.0);
+        
+        Ok(())
     }
 }

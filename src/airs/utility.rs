@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use ndarray::{Array2, Axis};
 use std::cmp::min;
 
 pub fn cartesian_product<T: Clone>(lists: Vec<Vec<T> >) -> Vec<Vec<T> > {
@@ -51,16 +51,14 @@ pub fn levenshtein(a: &str, b: &str) -> usize {
     dp[m]
 }
 
-pub fn matrix_to_string(matrix: &Vec<Vec<u8> >) -> String {
-    let rows: Vec<String> = matrix
-        .iter()
-        .map(|row| {
-            let cols: Vec<String> = row.iter()
-                .map(|val| val.to_string())
-                .collect();
-            format!("[{}]", cols.join(", "))
-        })
-        .collect();
+pub fn fliplr(x: &Array2<i8>) -> Array2<i8> {
+    let mut y = x.clone();
+    y.invert_axis(Axis(1));
+    y
+}
 
-    format!("[{}]", rows.join(", "))
+pub fn flipud(x: &Array2<i8>) -> Array2<i8> {
+    let mut y = x.clone();
+    y.invert_axis(Axis(0));
+    y
 }
