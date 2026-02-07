@@ -15,17 +15,13 @@ struct RawPair {
     pub output: Option<Vec<Vec<i8> > >,
 }
 
-#[derive(Debug)]
-pub struct Task {
-    pub train: Vec<Pair>,
-    pub test: Vec<Pair>,
-}
 
 #[derive(Debug)]
-pub struct Pair {
-    pub input: Array2<i8>,
-    pub output: Option<Array2<i8> >,
+pub struct Task {
+    pub train: Vec<(Array2<i8>, Array2<i8>)>,
+    pub test: Vec<(Array2<i8>, Option<Array2<i8> >)>,
 }
+
 
 #[derive(Debug)]
 pub struct Pairs {
@@ -38,7 +34,6 @@ pub async fn load_task(folder: &str, task: &str) -> Result<Task, Box<dyn std::er
         "https://raw.githubusercontent.com/arcprize/ARC-AGI-2/refs/heads/main/data/{}/{}.json",
         folder, task
     );
-
     let resp = reqwest::get(&url).await?;
     let raw_task: RawTask = resp.json().await?;
     let mut task = Task {
@@ -58,10 +53,10 @@ pub async fn load_task(folder: &str, task: &str) -> Result<Task, Box<dyn std::er
                 out.iter().flatten().cloned().collect(),
             ).unwrap();
 
-            task.train.push(Pair{input: arr_input, output: Some(arr_output)});
+            task.train.push((arr_input, arr_output));
         }
         else {
-            task.train.push(Pair{input: arr_input, output: None});
+            task.train.push((arr_input, Array2::default((0, 0))));
         }
     }
 
@@ -77,22 +72,37 @@ pub async fn load_task(folder: &str, task: &str) -> Result<Task, Box<dyn std::er
                 out.iter().flatten().cloned().collect(),
             ).unwrap();
 
-            task.test.push(Pair{input: arr_input, output: Some(arr_output)});
+            task.test.push((arr_input, Some(arr_output)));
         }
         else {
-            task.test.push(Pair{input: arr_input, output: None});
+            task.test.push((arr_input, None));
         }
     }
 
     Ok(task)
 }
 
-pub fn input_output_pairs(pairs: &[Pair]) -> Pairs {
+pub fn input_output_pairs(pairs: &[(Array2<i8>, Array2<i8>)]) -> Pairs {
     let mut io_pairs = Pairs{inputs: vec![], outputs: vec![]};
 
     for p in pairs {
-        io_pairs.inputs.push(p.input.clone());
-        io_pairs.outputs.push(p.output.clone().unwrap_or(array![[]]));
+        let (input, output) = p;
+
+        io_pairs.inputs.push(input.clone());
+        io_pairs.outputs.push(output.clone());
+    }
+
+    io_pairs
+}
+
+pub fn input_option_output_pairs(pairs: &[(Array2<i8>, Option<Array2<i8> >)]) -> Pairs {
+    let mut io_pairs = Pairs{inputs: vec![], outputs: vec![]};
+
+    for p in pairs {
+        let (input, output) = p;
+
+        io_pairs.inputs.push(input.clone());
+        io_pairs.outputs.push(output.clone().unwrap_or(array![[]]));
     }
 
     io_pairs

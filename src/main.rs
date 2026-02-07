@@ -22,6 +22,7 @@ mod tests
 
     use super::arc::load_task;
     use super::arc::input_output_pairs;
+    use super::arc::input_option_output_pairs;
     use super::primitives::*;
 
     #[test]
@@ -277,8 +278,8 @@ mod tests
     async fn test_task3c9b0459() -> Result<(), Box<dyn std::error::Error>> {
         let task = load_task("training", "3c9b0459").await?;
         let train_pairs = input_output_pairs(&task.train);
-        let test_pairs = input_output_pairs(&task.test);
-
+        let test_pairs = input_option_output_pairs(&task.test);
+        
         let fliplr_neuron = Arc::new(Neuron::new(
             "fliplr",
             RwLock::new(Arc::new(|inputs: &[NeuronValue]| {
@@ -354,6 +355,133 @@ mod tests
         
         assert!(connections[0].output().unwrap().heuristic(&NeuronValue::Grids(test_pairs.outputs)) == 0.0);
         
+        Ok(())
+    }
+    
+    #[tokio::test]
+    async fn test_task0d3d703e() -> Result<(), Box<dyn std::error::Error>> {
+        let task = load_task("training", "0d3d703e").await?;
+        let train_pairs = input_output_pairs(&task.train);
+        let test_pairs = input_option_output_pairs(&task.test);
+
+        let infer_color_mapping_neuron = Arc::new(Neuron::new(
+            "infer_color_mapping",
+            RwLock::new(Arc::new(|inputs: &[NeuronValue]| {
+                if inputs.len() != 1 {
+                    return None;
+                }
+
+                match &inputs[0] {
+                    NeuronValue::PairGrids(a) => {
+                        Some(NeuronValue::Map(infer_color_mapping(a)))
+                    }
+                    _ => None,
+                }
+            })),
+            vec![ValueType::PairGrids],
+            ValueType::Map,
+        ));
+
+        let map_neuron = Arc::new(Neuron::new(
+            "map",
+            RwLock::new(Arc::new(|inputs: &[NeuronValue]| {
+                if inputs.len() != 2 {
+                    return None;
+                }
+
+                match (&inputs[0], &inputs[1]) {
+                    (NeuronValue::Grids(a), NeuronValue::Map(b)) => {
+                        Some(NeuronValue::Grids(map(a, b)))
+                    }
+                    _ => None,
+                }
+            })),
+            vec![ValueType::Grids, ValueType::Map],
+            ValueType::Grids,
+        ));
+
+        let pair_grids = task.train;
+
+        let train_pairs_neuron = Arc::new(Neuron::new(
+            "train_pairs",
+            RwLock::new(Arc::new(move |_inputs| {
+                Some(NeuronValue::PairGrids(pair_grids.clone()))
+            })),
+            vec![],
+            ValueType::PairGrids,
+        ));
+
+        let output_grids: Vec<ndarray::ArrayBase<ndarray::OwnedRepr<i8>, ndarray::Dim<[usize; 2]>, i8>> = train_pairs.outputs.clone();
+
+        let pairs_neuron = Arc::new(Neuron::new(
+            "pairs",
+            RwLock::new(Arc::new(move |inputs: &[NeuronValue]| {
+                if inputs.len() != 1 {
+                    return None;
+                }
+
+                match &inputs[0] {
+                    NeuronValue::Grids(a) => {
+                        if a.len() != output_grids.len() {
+                            return None;
+                        }
+                        
+                        let mut v = vec![];
+                        
+                        for i in 0..a.len() {
+                            v.push((a[i].clone(), output_grids[i].clone()));
+                        }
+
+                        Some(NeuronValue::PairGrids(v))
+                    }
+                    _ => None,
+                }
+            })),
+            vec![ValueType::Grids],
+            ValueType::PairGrids,
+        ));
+
+        let mut input = train_pairs.inputs;
+
+        let input_neuron = Arc::new(Neuron::new(
+            "input",
+            RwLock::new(Arc::new(move |_inputs| {
+                Some(NeuronValue::Grids(input.clone()))
+            })),
+            vec![],
+            ValueType::Grids,
+        ));
+
+        let mut neurons: Vec<Arc<Neuron> > = vec![];
+
+        neurons.push(infer_color_mapping_neuron.clone());
+        neurons.push(map_neuron.clone());
+        neurons.push(train_pairs_neuron.clone());
+        //neurons.push(pairs_neuron.clone());
+        neurons.push(input_neuron.clone());
+
+        let target = NeuronValue::Grids(train_pairs.outputs);
+
+        let brain: Brain = Brain::new(neurons);
+        let connections = brain.learn(&[target.clone()].to_vec(), 3, 1e-6);
+
+        assert_ne!(connections.len(), 0);
+
+        println!("{}", connections[0].to_string());
+
+        assert!(connections[0].output().unwrap().heuristic(&target) == 0.0);
+        
+        input = test_pairs.inputs;
+        
+        {
+            let mut func = input_neuron.function.write().unwrap();
+            *func = Arc::new(move |_inputs: &[NeuronValue]| {
+                Some(NeuronValue::Grids(input.clone()))
+            });
+        }
+        
+        assert!(connections[0].output().unwrap().heuristic(&NeuronValue::Grids(test_pairs.outputs)) == 0.0);
+
         Ok(())
     }
 }

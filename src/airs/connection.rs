@@ -85,9 +85,11 @@ impl Connection {
                 NeuronValue::Float(f) => f.to_string(),
                 NeuronValue::Double(d) => d.to_string(),
                 NeuronValue::Grid(g) => format!("{:#?}", g),
-                NeuronValue::Grids(_g) => String::new(),
+                NeuronValue::Grids(g) => format!("{:#?}", g),
                 NeuronValue::String(s) => s.clone(),
                 NeuronValue::ValueType(t) => format!("{:?}", t),
+                NeuronValue::PairGrids(v) => format!("{:#?}", v),
+                NeuronValue::Map(m) => format!("{:#?}", m),
             }
 
             ConnectionValue::Connection(c) => c.to_string(),

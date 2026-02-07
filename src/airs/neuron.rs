@@ -2,6 +2,7 @@ use ndarray::Array2;
 use std::fmt::{Debug, Display, Formatter, Result};
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, RwLock};
+use std::collections::HashMap;
 
 use super::utility::*;
 
@@ -17,6 +18,8 @@ pub enum ValueType {
     Grid,
     Grids,
     Type,
+    Map,
+    PairGrids,
 }
 
 #[derive(Clone, Debug)]
@@ -31,6 +34,8 @@ pub enum NeuronValue {
     Grid(Array2<i8>),
     Grids(Vec<Array2<i8> >),
     ValueType(ValueType),
+    Map(HashMap<i8, i8>),
+    PairGrids(Vec<(Array2<i8>, Array2<i8>)>),
 }
 
 impl Display for NeuronValue {
@@ -55,6 +60,9 @@ impl PartialEq for NeuronValue {
             (NeuronValue::String(a), NeuronValue::String(b)) => a == b,
             (NeuronValue::ValueType(a), NeuronValue::ValueType(b)) => a == b,
             (NeuronValue::Grid(a), NeuronValue::Grid(b)) => a == b,
+            (NeuronValue::Grids(a), NeuronValue::Grids(b)) => a == b,
+            (NeuronValue::Map(a), NeuronValue::Map(b)) => a == b,
+            (NeuronValue::PairGrids(a), NeuronValue::PairGrids(b)) => a == b,
             _ => false,
         }
     }
@@ -75,6 +83,8 @@ impl Hash for NeuronValue {
             NeuronValue::Grids(v) => v.hash(state),
             NeuronValue::ValueType(v) => v.hash(state),
             NeuronValue::String(v) => v.hash(state),
+            NeuronValue::Map(v) => v.iter().collect::<Vec<_> >().hash(state),
+            NeuronValue::PairGrids(v) => v.hash(state),
         }
     }
 }
@@ -92,6 +102,8 @@ impl NeuronValue {
             NeuronValue::Grid(_) => ValueType::Grid,
             NeuronValue::Grids(_) => ValueType::Grids,
             NeuronValue::ValueType(t) => t.clone(),
+            NeuronValue::Map(_) => ValueType::Map,
+            NeuronValue::PairGrids(_) => ValueType::PairGrids,
         }
     }
 

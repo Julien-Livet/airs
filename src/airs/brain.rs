@@ -186,8 +186,11 @@ impl Brain {
 
                         c.apply_inputs(params);
 
-                        let value = c.output().unwrap();
-                        let cost = value.heuristic(target);
+                        let mut cost = f64::INFINITY;
+
+                        if let Some(value) = c.output() {
+                            cost = value.heuristic(target);
+                        }
 
                         heap.push(Pair {
                             cost,
