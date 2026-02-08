@@ -3,6 +3,7 @@ use itertools::{Itertools, MultiProduct};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, BinaryHeap};
 use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
 
 use crate::airs::connection;
 
@@ -12,6 +13,31 @@ use super::neuron::Neuron;
 use super::neuron::NeuronValue;
 use super::neuron::ValueType;
 use super::utility::*;
+
+fn load_f64(a: &AtomicU64) -> f64 {
+    f64::from_bits(a.load(std::sync::atomic::Ordering::Relaxed))
+}
+
+fn store_min(a: &AtomicU64, value: f64) {
+    let mut old = a.load(std::sync::atomic::Ordering::Relaxed);
+
+    loop {
+        let old_f = f64::from_bits(old);
+        if value >= old_f {
+            break;
+        }
+
+        match a.compare_exchange_weak(
+            old,
+            value.to_bits(),
+            std::sync::atomic::Ordering::Relaxed,
+            std::sync::atomic::Ordering::Relaxed,
+        ) {
+            Ok(_) => break,
+            Err(x) => old = x,
+        }
+    }
+}
 
 pub struct Brain {
     neurons: Vec<Arc<Neuron> >,
@@ -181,38 +207,55 @@ impl Brain {
                 })
                 .collect();
 
+        let global_best = Arc::new(AtomicU64::new(f64::INFINITY.to_bits()));
+
         targets
             .par_iter()
             .map(|target| {
-                let mut heap = BinaryHeap::new();
+                let local_best = Arc::new(AtomicU64::new(f64::INFINITY.to_bits()));
 
-                'conn_loop: for (conn, args) in &connection_args {
-                    for params in args.iter().multi_cartesian_product() {
-                        let c = Arc::new(conn.deep_clone());
-                        let inputs: Vec<ConnectionValue> = params.iter().cloned().cloned().collect();
+                let best_pair = connection_args
+                    .par_iter()
+                    .flat_map_iter(|(conn, args)| {
+                        let conn = conn.clone();
+                        let global_best = Arc::clone(&global_best);
+                        let local_best = Arc::clone(&local_best);
 
-                        c.apply_inputs(&inputs);
+                        args.iter()
+                            .multi_cartesian_product()
+                            .filter_map(move |params| {
+                                if load_f64(&global_best) < eps {
+                                    return None;
+                                }
 
-                        let cost = c
-                            .output()
-                            .map(|v| v.heuristic(target))
-                            .unwrap_or(f64::INFINITY);
+                                let c = Arc::new(conn.deep_clone());
+                                let inputs: Vec<ConnectionValue> = params.iter().cloned().cloned().collect();
 
-                        heap.push(Pair {
-                            cost,
-                            connection_cost: c.cost(),
-                            connection: c,
-                        });
+                                c.apply_inputs(&inputs);
 
-                        if cost < eps {
-                            break 'conn_loop;
-                        }
-                    }
-                }
+                                let cost = c
+                                    .output()
+                                    .map(|v| v.heuristic(target))
+                                    .unwrap_or(f64::INFINITY);
 
-                heap.pop()
-                    .expect("No solution found")
-                    .connection
+                                if cost >= load_f64(&local_best) {
+                                    return None;
+                                }
+
+                                store_min(&local_best, cost);
+                                store_min(&global_best, cost);
+
+                                Some(Pair {
+                                    cost,
+                                    connection_cost: c.cost(),
+                                    connection: c,
+                                })
+                            })
+                    })
+                    .reduce_with(|a, b| if a.cost < b.cost { a } else { b })
+                    .expect("No solution found");
+
+                best_pair.connection
             })
             .collect()
     }
