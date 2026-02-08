@@ -244,7 +244,7 @@ mod tests
 
         assert_eq!(connections.len(), 1);
     }
-/*
+
     #[test]
     fn test_str() {
         let mut neurons: Vec<Arc<Neuron> > = vec![];
@@ -550,7 +550,7 @@ mod tests
 
         Ok(())
     }
-*/
+
     #[tokio::test]
     async fn test_task253bf280() -> Result<(), Box<dyn std::error::Error> > {
         let task = load_task("training", "253bf280").await?;
