@@ -159,7 +159,7 @@ impl Connection {
     }
 
     pub fn apply_inputs(&self, inputs: &[ConnectionValue]) {
-        assert_eq!(inputs.len(), self.input_types().len());
+        debug_assert_eq!(inputs.len(), self.input_types().len());
 
         let mut inner_inputs = self.inputs.write().expect("Lock poisoned");
         let mut index: usize = 0;
@@ -190,13 +190,13 @@ impl Connection {
                             ConnectionValue::Value(value) => {
                                 match value {
                                     NeuronValue::ValueType(t) => {
-                                        assert_eq!(
+                                        debug_assert_eq!(
                                             self.neuron.input_types()[i],
                                             *t
                                         );
                                     }
                                     other => {
-                                        assert_eq!(
+                                        debug_assert_eq!(
                                             self.neuron.input_types()[i],
                                             other.value_type()
                                         );
@@ -258,5 +258,44 @@ impl Connection {
         }
 
         Connection::new(self.neuron.clone(), &new_inputs)
+    }
+
+    pub fn output_with_inputs(&self, inputs: &[ConnectionValue]) -> Option<NeuronValue> {
+        let self_inputs = self.inputs.read().expect("Lock poisoned");
+        let mut args: Vec<NeuronValue> = Vec::with_capacity(self_inputs.len());
+        let mut index = 0;
+
+        for input in self_inputs.iter() {
+            match input {
+                ConnectionValue::Connection(conn) => {
+                    let size = conn.input_types().len();
+
+                    if index + size > inputs.len() {
+                        return None;
+                    }
+
+                    let value = conn.output_with_inputs(&inputs[index..index + size])?;
+                    args.push(value);
+                    index += size;
+                }
+
+                ConnectionValue::Value(v) => {
+                    if index < inputs.len() {
+                        match inputs[index].clone() {
+                            ConnectionValue::Connection(c) => args.push(c.output().unwrap()),
+                            ConnectionValue::Value(v) => args.push(v),
+                        }
+
+                        index += 1;
+                    }
+                }
+            }
+        }
+
+        debug_assert_eq!(args.len(), self_inputs.len());
+
+        let function = self.neuron.function.read().expect("Lock poisoned");
+
+        function(&args)
     }
 }

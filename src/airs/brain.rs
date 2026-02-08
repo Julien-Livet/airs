@@ -214,9 +214,9 @@ impl Brain {
             .map(|target| {
                 let local_best = Arc::new(AtomicU64::new(f64::INFINITY.to_bits()));
 
-                let best_pair = connection_args
+                connection_args
                     .par_iter()
-                    .flat_map_iter(|(conn, args)| {
+                    .flat_map_iter( |(conn, args)| {
                         let conn = conn.clone();
                         let global_best = Arc::clone(&global_best);
                         let local_best = Arc::clone(&local_best);
@@ -228,13 +228,9 @@ impl Brain {
                                     return None;
                                 }
 
-                                let c = Arc::new(conn.deep_clone());
                                 let inputs: Vec<ConnectionValue> = params.iter().cloned().cloned().collect();
-
-                                c.apply_inputs(&inputs);
-
-                                let cost = c
-                                    .output()
+                                let cost = conn
+                                    .output_with_inputs(&inputs)
                                     .map(|v| v.heuristic(target))
                                     .unwrap_or(f64::INFINITY);
 
@@ -245,17 +241,19 @@ impl Brain {
                                 store_min(&local_best, cost);
                                 store_min(&global_best, cost);
 
+                                let new_conn = conn.clone();
+                                new_conn.apply_inputs(&inputs);
+
                                 Some(Pair {
                                     cost,
-                                    connection_cost: c.cost(),
-                                    connection: c,
+                                    connection_cost: conn.cost(),
+                                    connection: new_conn,
                                 })
                             })
                     })
                     .reduce_with(|a, b| if a.cost < b.cost { a } else { b })
-                    .expect("No solution found");
-
-                best_pair.connection
+                    .expect("No solution found")
+                    .connection
             })
             .collect()
     }
