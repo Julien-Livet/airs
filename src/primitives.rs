@@ -3,10 +3,12 @@ use std::collections::HashMap;
 
 use crate::airs;
 
+/// Flip left and right columns
 pub fn fliplr(x: &[Array2<i8>]) -> Vec<Array2<i8> > {
     x.iter().map(airs::fliplr).collect()
 }
 
+/// Flip up and down rows
 pub fn flipud(x: &[Array2<i8>]) -> Vec<Array2<i8> > {
     x.iter().map(airs::flipud).collect()
 }
