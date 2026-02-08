@@ -2,6 +2,72 @@ mod airs;
 mod arc;
 mod primitives;
 
+use ndarray::Array2;
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
+
+use airs::Neuron as Neuron;
+use airs::NeuronFn as NeuronFn;
+use airs::ValueType as ValueType;
+
+use crate::airs::NeuronValue;
+
+fn update_region_neurons(region_neurons: &mut HashMap<i8, Arc<Neuron> >, pairs: &Vec<Array2<i8> >) {
+    let mut region_map: HashMap<i8, Vec<Vec<Vec<(isize, isize)> > > > = HashMap::new();
+
+    for input_ in pairs {
+        let s = airs::region_set(input_, false);
+
+        let mut regions: HashMap<i8, Vec<Vec<(isize, isize)> > > = (0..10)
+            .map(|i| (i, Vec::new()))
+            .collect();
+
+        for r in s {
+            let value = input_[(r[0].0 as usize, r[0].1 as usize)];
+            regions.get_mut(&value).unwrap().push(r);
+        }
+
+        for (&k, v) in &regions {
+            let l = region_map.entry(k).or_insert_with(Vec::new);
+            l.push(v.clone());
+        }
+    }
+
+    for (&k, v) in &region_map {
+        let function: Arc<NeuronFn> = Arc::new({
+            let v = v.clone();
+
+            move |_| Some(NeuronValue::RegionsList(v.clone()))
+        });
+
+        let empty_count = v.iter().filter(|l| l.is_empty()).count();
+
+        match region_neurons.get_mut(&k) {
+            Some(neuron) => {
+                if empty_count != v.len() {
+                    let mut func = neuron.function.write().unwrap();
+                    *func = function;
+                } else {
+                    region_neurons.remove(&k);
+                }
+            }
+            None => {
+                if empty_count != v.len() {
+                    region_neurons.insert(
+                        k,
+                        Arc::new(Neuron::new(
+                            format!("region{}", k),
+                            RwLock::new(function),
+                            vec![],
+                            ValueType::RegionsList
+                        )),
+                    );
+                }
+            }
+        }
+    }
+}
+
 #[cfg(not(test))]
 fn main() {
 }
@@ -9,7 +75,7 @@ fn main() {
 #[cfg(test)]
 mod tests
 {
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
     use std::hash::{DefaultHasher, Hash, Hasher};
     use std::sync::{Arc, RwLock};
 
@@ -178,7 +244,7 @@ mod tests
 
         assert_eq!(connections.len(), 1);
     }
-
+/*
     #[test]
     fn test_str() {
         let mut neurons: Vec<Arc<Neuron> > = vec![];
@@ -275,7 +341,7 @@ mod tests
     }
 
     #[tokio::test]
-    async fn test_task3c9b0459() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_task3c9b0459() -> Result<(), Box<dyn std::error::Error> > {
         let task = load_task("training", "3c9b0459").await?;
         let train_pairs = input_output_pairs(&task.train);
         let test_pairs = input_option_output_pairs(&task.test);
@@ -359,7 +425,7 @@ mod tests
     }
     
     #[tokio::test]
-    async fn test_task0d3d703e() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_task0d3d703e() -> Result<(), Box<dyn std::error::Error> > {
         let task = load_task("training", "0d3d703e").await?;
         let train_pairs = input_output_pairs(&task.train);
         let test_pairs = input_option_output_pairs(&task.test);
@@ -463,7 +529,7 @@ mod tests
         let target = NeuronValue::Grids(train_pairs.outputs);
 
         let brain: Brain = Brain::new(neurons);
-        let connections = brain.learn(&[target.clone()].to_vec(), 3, 1e-6);
+        let connections = brain.learn(&[target.clone()].to_vec(), 2, 1e-6);
 
         assert_ne!(connections.len(), 0);
 
@@ -477,6 +543,182 @@ mod tests
             let mut func = input_neuron.function.write().unwrap();
             *func = Arc::new(move |_inputs: &[NeuronValue]| {
                 Some(NeuronValue::Grids(input.clone()))
+            });
+        }
+        
+        assert!(connections[0].output().unwrap().heuristic(&NeuronValue::Grids(test_pairs.outputs)) == 0.0);
+
+        Ok(())
+    }
+*/
+    #[tokio::test]
+    async fn test_task253bf280() -> Result<(), Box<dyn std::error::Error> > {
+        let task = load_task("training", "253bf280").await?;
+        let train_pairs = input_output_pairs(&task.train);
+        let test_pairs = input_option_output_pairs(&task.test);
+
+        let input = train_pairs.clone().inputs;
+
+        let input_neuron = Arc::new(Neuron::new(
+            "input",
+            RwLock::new(Arc::new(move |_inputs| {
+                Some(NeuronValue::Grids(input.clone()))
+            })),
+            vec![],
+            ValueType::Grids,
+        ));
+
+        let segments_neuron = Arc::new(Neuron::new(
+            "segments",
+            RwLock::new(Arc::new(|inputs: &[NeuronValue]| {
+                if inputs.len() != 5 {
+                    return None;
+                }
+
+                match (&inputs[0], &inputs[1], &inputs[2], &inputs[3], &inputs[4]) {
+                    (NeuronValue::Grids(a), NeuronValue::LocationPairs(b), NeuronValue::Int8(c), NeuronValue::Bool(d), NeuronValue::Bool(e)) => {
+                        Some(NeuronValue::Grids(segments(a, b, c.clone(), d.clone(), e.clone())))
+                    }
+                    _ => None,
+                }
+            })),
+            vec![ValueType::Grids, ValueType::LocationPairs, ValueType::Int8, ValueType::Bool, ValueType::Bool],
+            ValueType::Grids,
+        ));
+
+        let same_element_neuron = Arc::new(Neuron::new(
+            "same_element",
+            RwLock::new(Arc::new(|inputs: &[NeuronValue]| {
+                if inputs.len() != 2 {
+                    return None;
+                }
+
+                match (&inputs[0], &inputs[1]) {
+                    (NeuronValue::LocationPairs(a), NeuronValue::Bool(b)) => {
+                        Some(NeuronValue::LocationPairs(same_element(a, b.clone())))
+                    }
+                    _ => None,
+                }
+            })),
+            vec![ValueType::LocationPairs, ValueType::Bool],
+            ValueType::LocationPairs,
+        ));
+
+        let region_pairs_neuron = Arc::new(Neuron::new(
+            "region_pairs",
+            RwLock::new(Arc::new(|inputs: &[NeuronValue]| {
+                if inputs.len() != 1 {
+                    return None;
+                }
+
+                match &inputs[0] {
+                    NeuronValue::RegionsList(a) => {
+                        Some(NeuronValue::LocationPairs(region_pairs(&a.clone())))
+                    }
+                    _ => None,
+                }
+            })),
+            vec![ValueType::RegionsList],
+            ValueType::LocationPairs,
+        ));
+
+        let false_neuron = Arc::new(Neuron::new(
+            "false",
+            RwLock::new(Arc::new(move |_inputs| {
+                Some(NeuronValue::Bool(false))
+            })),
+            vec![],
+            ValueType::Bool,
+        ));
+
+        let true_neuron = Arc::new(Neuron::new(
+            "true",
+            RwLock::new(Arc::new(move |_inputs| {
+                Some(NeuronValue::Bool(true))
+            })),
+            vec![],
+            ValueType::Bool,
+        ));
+
+        let mut digit_neurons: Vec<Arc<Neuron> > = vec![];
+        
+        for i in 0..10 {
+            let name = format!("{}", i);
+
+            let neuron = Arc::new(Neuron::new(
+                name,
+                RwLock::new(Arc::new(move |_inputs: &[NeuronValue]| {
+                    Some(NeuronValue::Int8(i as i8))
+                })),
+                vec![],
+                ValueType::Int8,
+            ));
+
+            digit_neurons.push(neuron);
+        }
+
+        let mut region_neurons : HashMap<i8, Arc<Neuron> > = HashMap::new();
+        let train_inputs = train_pairs.clone().inputs;
+        super::update_region_neurons(&mut region_neurons, &train_inputs.clone());
+
+        let mut neurons: Vec<Arc<Neuron> > = vec![];
+
+        neurons.push(segments_neuron.clone());
+        neurons.push(same_element_neuron.clone());
+        neurons.push(region_pairs_neuron.clone());
+        neurons.push(false_neuron.clone());
+        neurons.push(true_neuron.clone());
+        neurons.push(input_neuron.clone());
+
+        for (_k, v) in &region_neurons {
+            neurons.push(v.clone());
+        }
+
+        {
+            let mut digits: HashSet<i8> = HashSet::new();
+
+            for m in &train_pairs.inputs {
+                for &v in m.iter() {
+                    digits.insert(v);
+                }
+            }
+
+            for m in &train_pairs.outputs {
+                for &v in m.iter() {
+                    digits.insert(v);
+                }
+            }
+
+            let mut existing_digits = Vec::with_capacity(10);
+            for i in 0..10 {
+                existing_digits.push(digits.contains(&(i as i8)));
+            }
+
+            for (i, exists) in existing_digits.iter().enumerate() {
+                if *exists {
+                    neurons.push(digit_neurons[i].clone());
+                }
+            }
+        }
+
+        let target = NeuronValue::Grids(train_pairs.outputs);
+
+        let brain: Brain = Brain::new(neurons);
+        let connections = brain.learn(&[target.clone()].to_vec(), 3, 1e-6);
+
+        assert_ne!(connections.len(), 0);
+
+        println!("{}", connections[0].to_string());
+
+        assert!(connections[0].output().unwrap().heuristic(&target) == 0.0);
+        
+        let test_inputs = test_pairs.clone().inputs;
+        super::update_region_neurons(&mut region_neurons, &test_inputs);
+
+        {
+            let mut func = input_neuron.function.write().unwrap();
+            *func = Arc::new(move |_inputs: &[NeuronValue]| {
+                Some(NeuronValue::Grids(test_inputs.clone()))
             });
         }
         

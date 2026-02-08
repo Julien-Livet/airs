@@ -1,7 +1,10 @@
 use rayon::prelude::*;
+use itertools::{Itertools, MultiProduct};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, BinaryHeap};
 use std::sync::Arc;
+
+use crate::airs::connection;
 
 use super::connection::Connection;
 use super::connection::ConnectionValue;
@@ -103,11 +106,11 @@ impl Brain {
 
         for _ in 0..max_level {
             let mut mapping = connection_mapping.clone();
-
+            
             for connection in &connections {
                 let neuron = connection.neuron();
                 let output_type = neuron.output_type().clone();
-                let input_types = neuron.input_types();
+                let input_types = connection.input_types();
                 let mut args: Vec<Vec<ConnectionValue> > = Vec::new();
                 
                 for input_type in input_types {
@@ -115,18 +118,22 @@ impl Brain {
                     
                     possibilities.push(ConnectionValue::Value(NeuronValue::ValueType(input_type.clone())));
 
-                    if let Some(existing_conns) = connection_mapping.get(input_type) {
+                    if let Some(existing_conns) = connection_mapping.get(&input_type.clone()) {
                         for existing in existing_conns {
                             possibilities.push(ConnectionValue::Connection(Arc::clone(existing)));
                         }
                     }
 
-                    args.push(possibilities);
+                    args.push(possibilities.clone());
                 }
                 
-                for p in cartesian_product(args) {
-                    let new_conn = Arc::new(Connection::new(connection.neuron().clone(), &p));
-                    
+                for p in args.iter().multi_cartesian_product() {
+                    let inputs: Vec<ConnectionValue> =
+                        p.iter().cloned().cloned().collect();
+
+                    let new_conn = Arc::new(connection.deep_clone());
+                    new_conn.apply_inputs(&inputs);
+
                     mapping
                         .entry(output_type.clone())
                         .or_insert_with(HashSet::new)
@@ -136,61 +143,60 @@ impl Brain {
 
             connection_mapping = mapping;
             connections.clear();
-            
+
             for set in connection_mapping.values() {
                 for conn in set {
                     connections.insert(conn.clone());
                 }
             }
         }
-
+        
         for neuron in &self.neurons {
             if neuron.input_types().is_empty() {
                 connections.insert(Arc::new(Connection::new(neuron.clone(), &vec![])));
             }
         }
         
-        let connection_parameters: HashMap<Arc<Connection>, Vec<Vec<ConnectionValue> > > =
-            connections
-                .par_iter()
+        let mut conns = connections.clone().into_iter().collect::<Vec<_> >();
+        conns.sort_by_key(|x| x.cost());
+        
+        let connection_args: Vec<(Arc<Connection>, Vec<Vec<ConnectionValue> >)> =
+            conns
+                .iter()
                 .filter_map(|conn| {
-                    let input_types = conn.input_types();
-                    let mut args: Vec<Vec<ConnectionValue>> = Vec::new();
+                    let mut args = Vec::new();
 
-                    for input_type in input_types {
-                        if let Some(values) = parameters.get(&input_type) {
-                            args.push(values.clone().into_iter().map(ConnectionValue::Connection).collect::<Vec<_> >());
-                        } else {
-                            return None;
-                        }
+                    for input_type in conn.input_types() {
+                        let values = parameters.get(&input_type)?;
+                        args.push(
+                            values
+                                .iter()
+                                .cloned()
+                                .map(ConnectionValue::Connection)
+                                .collect()
+                        );
                     }
 
-                    let product = cartesian_product(args);
-
-                    Some((conn.clone(), product))
+                    Some((conn.clone(), args))
                 })
                 .collect();
-
-        if connection_parameters.is_empty() {
-            return vec![];
-        }
 
         targets
             .par_iter()
             .map(|target| {
                 let mut heap = BinaryHeap::new();
 
-                'conn_loop: for (conn, params_list) in &connection_parameters {
-                    for params in params_list {
+                'conn_loop: for (conn, args) in &connection_args {
+                    for params in args.iter().multi_cartesian_product() {
                         let c = Arc::new(conn.deep_clone());
+                        let inputs: Vec<ConnectionValue> = params.iter().cloned().cloned().collect();
 
-                        c.apply_inputs(params);
+                        c.apply_inputs(&inputs);
 
-                        let mut cost = f64::INFINITY;
-
-                        if let Some(value) = c.output() {
-                            cost = value.heuristic(target);
-                        }
+                        let cost = c
+                            .output()
+                            .map(|v| v.heuristic(target))
+                            .unwrap_or(f64::INFINITY);
 
                         heap.push(Pair {
                             cost,
@@ -204,8 +210,7 @@ impl Brain {
                     }
                 }
 
-                heap
-                    .pop()
+                heap.pop()
                     .expect("No solution found")
                     .connection
             })

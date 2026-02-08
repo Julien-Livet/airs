@@ -16,14 +16,14 @@ struct RawPair {
 }
 
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Task {
     pub train: Vec<(Array2<i8>, Array2<i8>)>,
     pub test: Vec<(Array2<i8>, Option<Array2<i8> >)>,
 }
 
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Pairs {
     pub inputs: Vec<Array2<i8> >,
     pub outputs: Vec<Array2<i8> >,

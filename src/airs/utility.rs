@@ -2,26 +2,6 @@ use ndarray::{Array2, Axis};
 use std::collections::{HashMap, HashSet};
 use std::cmp::min;
 
-pub fn cartesian_product<T: Clone>(lists: Vec<Vec<T> >) -> Vec<Vec<T> > {
-    let mut result: Vec<Vec<T> > = vec![vec![]];
-
-    for list in lists {
-        let mut tmp = Vec::new();
-
-        for prefix in result.drain(..) {
-            for element in &list {
-                let mut n = prefix.clone();
-                n.push(element.clone());
-                tmp.push(n);
-            }
-        }
-
-        result = tmp;
-    }
-
-    result
-}
-
 #[inline]
 pub fn levenshtein(a: &str, b: &str) -> usize {
     let a_bytes = a.as_bytes();
@@ -165,22 +145,6 @@ pub fn map(dst: &Array2<i8>, mapping: &HashMap<i8, i8>) -> Array2<i8> {
     }
 
     m
-}
-
-pub fn region_pairs(regions: &Vec<Vec<(isize, isize)> >,) -> Vec<((isize, isize), (isize, isize))> {
-    regions
-        .iter()
-        .enumerate()
-        .flat_map(|(i, r1)| {
-            regions
-                .iter()
-                .skip(i + 1)
-                .flat_map(move |r2| {
-                    r1.iter()
-                        .flat_map(move |&p1| r2.iter().map(move |&p2| (p1, p2)))
-                })
-        })
-        .collect()
 }
 
 pub fn fill_region(a: &Array2<i8>, region: &Vec<(isize, isize)>, x: i8) -> Array2<i8> {

@@ -12,6 +12,8 @@ pub enum ValueType {
     Char,
     Double,
     Float,
+    Int8,
+    Int16,
     Int32,
     Int64,
     String,
@@ -20,6 +22,8 @@ pub enum ValueType {
     Type,
     Map,
     PairGrids,
+    LocationPairs,
+    RegionsList,
 }
 
 #[derive(Clone, Debug)]
@@ -28,6 +32,8 @@ pub enum NeuronValue {
     Char(String),
     Double(f64),
     Float(f32),
+    Int8(i8),
+    Int16(i8),
     Int32(i32),
     Int64(i64),
     String(String),
@@ -36,6 +42,8 @@ pub enum NeuronValue {
     ValueType(ValueType),
     Map(HashMap<i8, i8>),
     PairGrids(Vec<(Array2<i8>, Array2<i8>)>),
+    LocationPairs(Vec<Vec<((isize, isize), (isize, isize))> >),
+    RegionsList(Vec<Vec<Vec<(isize, isize)> > >),
 }
 
 impl Display for NeuronValue {
@@ -49,8 +57,10 @@ impl PartialEq for NeuronValue {
         match (self, other) {
             (NeuronValue::Bool(a), NeuronValue::Bool(b)) => a == b,
             (NeuronValue::Char(a), NeuronValue::Char(b)) => a == b,
-            (NeuronValue::Int64(a), NeuronValue::Int64(b)) => a == b,
+            (NeuronValue::Int8(a), NeuronValue::Int8(b)) => a == b,
+            (NeuronValue::Int16(a), NeuronValue::Int16(b)) => a == b,
             (NeuronValue::Int32(a), NeuronValue::Int32(b)) => a == b,
+            (NeuronValue::Int64(a), NeuronValue::Int64(b)) => a == b,
             (NeuronValue::Float(a), NeuronValue::Float(b)) => {
                 a.to_bits() == b.to_bits()
             }
@@ -63,6 +73,8 @@ impl PartialEq for NeuronValue {
             (NeuronValue::Grids(a), NeuronValue::Grids(b)) => a == b,
             (NeuronValue::Map(a), NeuronValue::Map(b)) => a == b,
             (NeuronValue::PairGrids(a), NeuronValue::PairGrids(b)) => a == b,
+            (NeuronValue::LocationPairs(a), NeuronValue::LocationPairs(b)) => a == b,
+            (NeuronValue::RegionsList(a), NeuronValue::RegionsList(b)) => a == b,
             _ => false,
         }
     }
@@ -75,6 +87,8 @@ impl Hash for NeuronValue {
         match self {
             NeuronValue::Bool(v) => v.hash(state),
             NeuronValue::Char(v) => v.hash(state),
+            NeuronValue::Int8(v) => v.hash(state),
+            NeuronValue::Int16(v) => v.hash(state),
             NeuronValue::Int32(v) => v.hash(state),
             NeuronValue::Int64(v) => v.hash(state),
             NeuronValue::Float(v) => v.to_bits().hash(state),
@@ -85,6 +99,8 @@ impl Hash for NeuronValue {
             NeuronValue::String(v) => v.hash(state),
             NeuronValue::Map(v) => v.iter().collect::<Vec<_> >().hash(state),
             NeuronValue::PairGrids(v) => v.hash(state),
+            NeuronValue::LocationPairs(v) => v.hash(state),
+            NeuronValue::RegionsList(v) => v.hash(state),
         }
     }
 }
@@ -96,6 +112,8 @@ impl NeuronValue {
             NeuronValue::Char(_) => ValueType::Char,
             NeuronValue::Double(_) =>ValueType::Double,
             NeuronValue::Float(_) => ValueType::Float,
+            NeuronValue::Int8(_) => ValueType::Int8,
+            NeuronValue::Int16(_) => ValueType::Int16,
             NeuronValue::Int32(_) => ValueType::Int32,
             NeuronValue::Int64(_) => ValueType::Int64,
             NeuronValue::String(_) => ValueType::String,
@@ -104,6 +122,8 @@ impl NeuronValue {
             NeuronValue::ValueType(t) => t.clone(),
             NeuronValue::Map(_) => ValueType::Map,
             NeuronValue::PairGrids(_) => ValueType::PairGrids,
+            NeuronValue::LocationPairs(_) => ValueType::LocationPairs,
+            NeuronValue::RegionsList(_) => ValueType::RegionsList,
         }
     }
 

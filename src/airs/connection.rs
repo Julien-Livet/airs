@@ -80,6 +80,8 @@ impl Connection {
             ConnectionValue::Value(value) => match value {
                 NeuronValue::Bool(b) => b.to_string(),
                 NeuronValue::Char(s) => s.clone(),
+                NeuronValue::Int8(i) => i.to_string(),
+                NeuronValue::Int16(i) => i.to_string(),
                 NeuronValue::Int32(i) => i.to_string(),
                 NeuronValue::Int64(i) => i.to_string(),
                 NeuronValue::Float(f) => f.to_string(),
@@ -90,6 +92,8 @@ impl Connection {
                 NeuronValue::ValueType(t) => format!("{:?}", t),
                 NeuronValue::PairGrids(v) => format!("{:#?}", v),
                 NeuronValue::Map(m) => format!("{:#?}", m),
+                NeuronValue::LocationPairs(p) => format!("{:#?}", p),
+                NeuronValue::RegionsList(r) => format!("{:#?}", r),
             }
 
             ConnectionValue::Connection(c) => c.to_string(),
